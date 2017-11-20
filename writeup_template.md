@@ -1,7 +1,3 @@
-## Writeup Template
-
-### You can use this file as a template for your writeup if you want to submit it as a markdown file, but feel free to use some other method and submit a pdf if you prefer.
-
 ---
 
 **Advanced Lane Finding Project**
@@ -17,27 +13,9 @@ The goals / steps of this project are the following:
 * Warp the detected lane boundaries back onto the original image.
 * Output visual display of the lane boundaries and numerical estimation of lane curvature and vehicle position.
 
-[//]: # (Image References)
+Project Repo: 
+https://github.com/bbhulani/sdc_p4_adv_lane_lines.git
 
-[image1]: ./examples/undistort_output.png "Undistorted"
-[image2]: ./test_images/test1.jpg "Road Transformed"
-[image3]: ./examples/binary_combo_example.jpg "Binary Example"
-[image4]: ./examples/warped_straight_lines.jpg "Warp Example"
-[image5]: ./examples/color_fit_lines.jpg "Fit Visual"
-[image6]: ./examples/example_output.jpg "Output"
-[video1]: ./project_video.mp4 "Video"
-
-## [Rubric](https://review.udacity.com/#!/rubrics/571/view) Points
-
-### Here I will consider the rubric points individually and describe how I addressed each point in my implementation.  
-
----
-
-### Writeup / README
-
-#### 1. Provide a Writeup / README that includes all the rubric points and how you addressed each one.  You can submit your writeup as markdown or pdf.  [Here](https://github.com/udacity/CarND-Advanced-Lane-Lines/blob/master/writeup_template.md) is a template writeup for this project you can use as a guide and a starting point.  
-
-You're reading it!
 
 ### Camera Calibration
 
@@ -49,66 +27,74 @@ I start by preparing "object points", which will be the (x, y, z) coordinates of
 
 I then used the output `objpoints` and `imgpoints` to compute the camera calibration and distortion coefficients using the `cv2.calibrateCamera()` function.  I applied this distortion correction to the test image using the `cv2.undistort()` function and obtained this result: 
 
-![alt text][image1]
+This code is implemented in camera_cal() and cal_undistort()
+
+./out_images/cal_undist_chessboard.png
 
 ### Pipeline (single images)
 
-#### 1. Provide an example of a distortion-corrected image.
+#### 1. Provide an example of a distortion-corrected image. 
 
-To demonstrate this step, I will describe how I apply the distortion correction to one of the test images like this one:
-![alt text][image2]
+Example of distortion corercted test image:
+./out_images/distortion_corrected_test.png
 
 #### 2. Describe how (and identify where in your code) you used color transforms, gradients or other methods to create a thresholded binary image.  Provide an example of a binary image result.
 
-I used a combination of color and gradient thresholds to generate a binary image (thresholding steps at lines # through # in `another_file.py`).  Here's an example of my output for this step.  (note: this is not actually from one of the test images)
+I used a combination of color and gradient thresholds to generate a binary image color_gradient().  
+I used the HLS colorspace and specifically the S_channel for threshold color transform  
+**** I need more time to explose HSV space and maybe combine another threshold to solve the issue when there are shadows in the image. 
+I used the sobel x operator for thrshold x gradient transform. 
+I combined the 2 binary threshold transforms for the output image at this stage. 
 
-![alt text][image3]
+Same image above after color and gradient transform:
+./out_images/color_gradient.png
 
 #### 3. Describe how (and identify where in your code) you performed a perspective transform and provide an example of a transformed image.
 
-The code for my perspective transform includes a function called `warper()`, which appears in lines 1 through 8 in the file `example.py` (output_images/examples/example.py) (or, for example, in the 3rd code cell of the IPython notebook).  The `warper()` function takes as inputs an image (`img`), as well as source (`src`) and destination (`dst`) points.  I chose the hardcode the source and destination points in the following manner:
+Perspective transform is done in corners_unwarp()
 
-```python
-src = np.float32(
-    [[(img_size[0] / 2) - 55, img_size[1] / 2 + 100],
-    [((img_size[0] / 6) - 10), img_size[1]],
-    [(img_size[0] * 5 / 6) + 60, img_size[1]],
-    [(img_size[0] / 2 + 55), img_size[1] / 2 + 100]])
-dst = np.float32(
-    [[(img_size[0] / 4), 0],
+The function takes in an undistorted image as input. The src and destination pts are:
+    # source points
+    offset1 = 300
+    offset2 = 55
+    offset3 = 100
+    offset4 = 200
+    src = np.float32([
+    [offset1, img_size[1]],
+    [(img_size[0] / 2) - offset2, img_size[1] / 2 + offset3],
+    [(img_size[0] / 2) + offset2, img_size[1] / 2 + offset3],
+    [img_size[0] - offset4, img_size[1]]
+    ])
+      
+    #destination points
+    dst = np.float32([
     [(img_size[0] / 4), img_size[1]],
-    [(img_size[0] * 3 / 4), img_size[1]],
-    [(img_size[0] * 3 / 4), 0]])
-```
-
-This resulted in the following source and destination points:
-
-| Source        | Destination   | 
-|:-------------:|:-------------:| 
-| 585, 460      | 320, 0        | 
-| 203, 720      | 320, 720      |
-| 1127, 720     | 960, 720      |
-| 695, 460      | 960, 0        |
-
-I verified that my perspective transform was working as expected by drawing the `src` and `dst` points onto a test image and its warped counterpart to verify that the lines appear parallel in the warped image.
-
-![alt text][image4]
+    [(img_size[0] / 4), 0],
+    [(img_size[0] * 3 / 4), 0],
+    [(img_size[0] * 3 / 4), img_size[1]]
+    ])
+    
+    I chose to use offsets from the midpoint of the X and Y axis lenghts for src points. 
+    *** This could be further refined to improve land detection for challenge video. Need more time to do that
+    
+Same image above after perspeftive transform:
+./output_images/perspective_transform
 
 #### 4. Describe how (and identify where in your code) you identified lane-line pixels and fit their positions with a polynomial?
+I used the sliding window approrach to identify the lane lines in the perspective transformed image. Once the left lane and right lane pixels are identified I fit the pixels to a second order polynomial using np.polyfit. The left and right lane polynomials are smoothed so as to avoid transient changes in lane detection. 
 
-Then I did some other stuff and fit my lane lines with a 2nd order polynomial kinda like this:
-
-![alt text][image5]
+Example output of lane identification on the perspective trarnsform image:
+./output_images/sliding_window_test6.png
 
 #### 5. Describe how (and identify where in your code) you calculated the radius of curvature of the lane and the position of the vehicle with respect to center.
 
-I did this in lines # through # in my code in `my_other_file.py`
+Radius of curvature is computed in sliding_window() (towards the end of the function!)
+The position of the vehicle respect to center is not computed ***
 
 #### 6. Provide an example image of your result plotted back down onto the road such that the lane area is identified clearly.
 
-I implemented this step in lines # through # in my code in `yet_another_file.py` in the function `map_lane()`.  Here is an example of my result on a test image:
-
-![alt text][image6]
+In process_image() I warp the detected lane to original image space using inverse perspective matrix (Minv). I then stack that on the undistorted image as show in example below
+./output_images/lane_plot_test6.png
 
 ---
 
@@ -116,12 +102,13 @@ I implemented this step in lines # through # in my code in `yet_another_file.py`
 
 #### 1. Provide a link to your final video output.  Your pipeline should perform reasonably well on the entire project video (wobbly lines are ok but no catastrophic failures that would cause the car to drive off the road!).
 
-Here's a [link to my video result](./project_video.mp4)
-
+./project_video_out.mp4
 ---
 
 ### Discussion
 
 #### 1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
 
-Here I'll talk about the approach I took, what techniques I used, what worked and why, where the pipeline might fail and how I might improve it if I were going to pursue this project further.  
+Things that can be improved
+1. When the lane has shadows from trees or passing under the bridge in the challenge video my code doesnt identify the lane correctly. This can possibly improved by using better color or gradient transforms
+2. In the challenge video the lane being so close to the the divider causes the lane detection to get messed up. The perspective transforms src/dst area needs to be reworked to make it better
